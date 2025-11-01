@@ -6,7 +6,6 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-//KEPT hardcoded for now
 const SOURCE_BUCKET: &str = "temp-video-storage-0306";
 const DEST_BUCKET: &str = "perm-video-storage-0306";
 
@@ -33,18 +32,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for (name, scale, bitrate) in resolutions {
         let output_path = format!("/tmp/output_{}.mp4", name);
-
         println!("Transcoding to {}...", name);
         transcode_video(input_path, &output_path, scale, bitrate)?;
 
         let dest_key = format!(
-            "{}/{}",
+            "{}/{}.mp4",
             Path::new(&source_key)
                 .file_stem()
                 .unwrap()
                 .to_str()
                 .unwrap(),
-            format!("{}.mp4", name)
+            name
         );
 
         println!("Uploading {} to s3://{}/{}", name, DEST_BUCKET, dest_key);
@@ -55,7 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     std::fs::remove_file(input_path)?;
-
     println!("Transcoding job completed successfully");
     Ok(())
 }
@@ -67,7 +64,6 @@ async fn download_from_s3(
     destination: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut object = client.get_object().bucket(bucket).key(key).send().await?;
-
     let mut file = File::create(destination)?;
 
     while let Some(bytes) = object.body.try_next().await? {
@@ -88,7 +84,6 @@ async fn upload_to_s3(
     file_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let body = ByteStream::from_path(Path::new(file_path)).await?;
-
     client
         .put_object()
         .bucket(bucket)
@@ -97,7 +92,6 @@ async fn upload_to_s3(
         .content_type("video/mp4")
         .send()
         .await?;
-
     Ok(())
 }
 
@@ -131,10 +125,8 @@ fn transcode_video(
             output,
         ])
         .status()?;
-
     if !status.success() {
         return Err(format!("FFmpeg failed with status: {}", status).into());
     }
-
     Ok(())
 }
