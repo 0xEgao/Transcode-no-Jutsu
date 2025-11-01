@@ -1,6 +1,10 @@
+use aws_sdk_ecs::Client as EcsClient;
+use aws_sdk_ecs::types::{
+    AssignPublicIp, AwsVpcConfiguration, ContainerOverride, KeyValuePair, LaunchType,
+    NetworkConfiguration, TaskOverride,
+};
 use aws_sdk_sqs::Client as SqsClient;
 use std::env;
-use std::process::Command;
 
 mod types;
 use types::S3Event;
@@ -9,8 +13,11 @@ use types::S3Event;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = aws_config::load_from_env().await;
     let sqs_client = SqsClient::new(&config);
+    let ecs_client = EcsClient::new(&config);
 
     let queue_url = "https://sqs.us-east-1.amazonaws.com/607696765426/video-pipeline-queue-0306";
+    let cluster_name = "0306";
+    let task_definition = "video-transcoder:4";
 
     println!("Listening for S3 events on SQS...");
 
@@ -36,38 +43,81 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("Bucket: {}", bucket);
                                 println!("Key: {}", key);
 
-                                let aws_access_key = env::var("AWS_ACCESS_KEY_ID")
-                                    .expect("AWS_ACCESS_KEY_ID not set");
-                                let aws_secret_key = env::var("AWS_SECRET_ACCESS_KEY")
-                                    .expect("AWS_SECRET_ACCESS_KEY not set");
+                                // Read AWS env vars from local env; fallback to blank if missing.
+                                let aws_access_key =
+                                    env::var("AWS_ACCESS_KEY_ID").unwrap_or_default();
+                                let aws_secret_key =
+                                    env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default();
                                 let aws_region = env::var("AWS_REGION")
                                     .unwrap_or_else(|_| "us-east-1".to_string());
                                 let aws_session_token =
                                     env::var("AWS_SESSION_TOKEN").unwrap_or_default();
 
-                                let mut args: Vec<String> = vec![
-                                    "run".to_string(),
-                                    "-e".to_string(),
-                                    format!("AWS_ACCESS_KEY_ID={}", aws_access_key),
-                                    "-e".to_string(),
-                                    format!("AWS_SECRET_ACCESS_KEY={}", aws_secret_key),
-                                    "-e".to_string(),
-                                    format!("AWS_REGION={}", aws_region),
-                                    "-e".to_string(),
-                                    format!("SOURCE_KEY={}", key),
+                                let mut env_vars = vec![
+                                    KeyValuePair::builder()
+                                        .name("SOURCE_KEY")
+                                        .value(key)
+                                        .build(),
+                                    KeyValuePair::builder()
+                                        .name("AWS_ACCESS_KEY_ID")
+                                        .value(aws_access_key)
+                                        .build(),
+                                    KeyValuePair::builder()
+                                        .name("AWS_SECRET_ACCESS_KEY")
+                                        .value(aws_secret_key)
+                                        .build(),
+                                    KeyValuePair::builder()
+                                        .name("AWS_REGION")
+                                        .value(aws_region)
+                                        .build(),
                                 ];
-
                                 if !aws_session_token.is_empty() {
-                                    args.push("-e".to_string());
-                                    args.push(format!("AWS_SESSION_TOKEN={}", aws_session_token));
+                                    env_vars.push(
+                                        KeyValuePair::builder()
+                                            .name("AWS_SESSION_TOKEN")
+                                            .value(aws_session_token)
+                                            .build(),
+                                    );
                                 }
 
-                                args.push("video-transcoder".to_string());
+                                let vpc_config = AwsVpcConfiguration::builder()
+                                    .subnets("subnet-0f9a913de5cf3e937")
+                                    .subnets("subnet-0b0af94fce4890072")
+                                    .subnets("subnet-079faba8373e26ede")
+                                    .security_groups("sg-06e74305073792022")
+                                    .assign_public_ip(AssignPublicIp::Enabled)
+                                    .build()?;
 
-                                println!("Launching video-transcoder container for key {}", key);
-                                let status = Command::new("docker").args(&args).status()?;
-                                if !status.success() {
-                                    eprintln!("Error: docker run failed ({:?})", status);
+                                let network_config = NetworkConfiguration::builder()
+                                    .awsvpc_configuration(vpc_config)
+                                    .build();
+
+                                let container_override = ContainerOverride::builder()
+                                    .name("video-transcoder")
+                                    .set_environment(Some(env_vars))
+                                    .build();
+
+                                let task_override = TaskOverride::builder()
+                                    .container_overrides(container_override)
+                                    .build();
+
+                                let result = ecs_client
+                                    .run_task()
+                                    .cluster(cluster_name)
+                                    .task_definition(task_definition)
+                                    .launch_type(LaunchType::Fargate)
+                                    .network_configuration(network_config)
+                                    .overrides(task_override)
+                                    .count(1)
+                                    .send()
+                                    .await?;
+
+                                if let Some(tasks) = result.tasks {
+                                    if let Some(task) = tasks.get(0) {
+                                        if let Some(task_arn) = task.task_arn() {
+                                            println!("Started ECS task: {}", task_arn);
+                                        }
+                                    }
                                 }
 
                                 if let Some(receipt) = msg.receipt_handle() {
