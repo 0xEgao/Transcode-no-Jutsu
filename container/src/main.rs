@@ -37,11 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let dest_key = format!(
             "{}/{}.mp4",
-            Path::new(&source_key)
-                .file_stem()
-                .unwrap()
-                .to_str()
-                .unwrap(),
+            Path::new(&source_key).file_stem()?.to_str()?,
             name
         );
 

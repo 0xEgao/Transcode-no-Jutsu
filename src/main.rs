@@ -38,7 +38,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             for record in event.records {
                                 let bucket = &record.s3.bucket.name;
                                 let key = &record.s3.object.key;
-
                                 println!("New S3 Upload Event:");
                                 println!("Bucket: {}", bucket);
                                 println!("Key: {}", key);
