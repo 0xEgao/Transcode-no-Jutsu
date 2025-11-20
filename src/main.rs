@@ -15,9 +15,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sqs_client = SqsClient::new(&config);
     let ecs_client = EcsClient::new(&config);
 
-    let queue_url = "https://sqs.us-east-1.amazonaws.com/607696765426/video-pipeline-queue-0306";
-    let cluster_name = "0306";
-    let task_definition = "video-transcoder:4";
+    let queue_url = "https://sqs.us-east-1.amazonaws.com/091049244748/video-pipeline-queue-0342";
+    let cluster_name = "0342-video";
+    let task_definition = "video-transcoder:1";
 
     println!("Listening for S3 events on SQS...");
 
@@ -80,10 +80,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
 
                                 let vpc_config = AwsVpcConfiguration::builder()
-                                    .subnets("subnet-0f9a913de5cf3e937")
-                                    .subnets("subnet-0b0af94fce4890072")
-                                    .subnets("subnet-079faba8373e26ede")
-                                    .security_groups("sg-06e74305073792022")
+                                    .subnets("subnet-0e00f1da12d6bc546")
+                                    .subnets("subnet-0bfd5432d208ee8ff")
+                                    .subnets("subnet-069cb61c8663259a3")
+                                    .security_groups("sg-0d946d4f1351b5bfd")
                                     .assign_public_ip(AssignPublicIp::Enabled)
                                     .build()?;
 
