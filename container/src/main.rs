@@ -6,8 +6,8 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-const SOURCE_BUCKET: &str = "temp-video-storage-0306";
-const DEST_BUCKET: &str = "perm-video-storage-0306";
+const SOURCE_BUCKET: &str = "temp-video-storage-0342";
+const DEST_BUCKET: &str = "perm-video-storage-0342";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +37,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let dest_key = format!(
             "{}/{}.mp4",
-            Path::new(&source_key).file_stem()?.to_str()?,
+            Path::new(&source_key)
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap(),
             name
         );
 
